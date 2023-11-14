@@ -1,0 +1,188 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "vmSize": {
+      "type": "string",
+      "metadata": { "description": "Specify the virtual machine size" }
+    },
+    "vmName": {
+      "type": "string",
+      "defaultValue": "RandEnterpriceVM1",
+      "metadata": { "description": "Name of the virtual machine" }
+    },
+    "adminUsername": {
+      "type": "string",
+      "metadata": { "description": "Admin username for the virtual machine" }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": { "description": "Admin password for the virtual machine" }
+    },
+    "virtualNetworkName": {
+      "type": "string",
+      "defaultValue": "RandEnt_vnet",
+      "metadata": { "description": "Name of the virtual network" }
+    }
+  },
+  "variables": {
+    "vmName": "[parameters('vmName')]",
+    "nic1": "nic1",
+    "virtualNetworkName": "[parameters('virtualNetworkName')]",
+    "subnet0Name": "subnet0",
+    "publicIPAddressName": "Rand_IP",
+    "subnet0Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), variables('subnet0Name'))]",
+    "networkSecurityGroupName": "nsg1",
+    "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'sa')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2021-04-01",
+      "name": "Rand-VM1",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[variables('nic1')]",
+        "[variables('storageAccountName')]"
+      ],
+      "properties": {
+        "osProfile": {
+          "computerName": "[variables('vmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]",
+          "windowsConfiguration": {
+            "provisionVmAgent": "true"
+          }
+        },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "2019-Datacenter",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          },
+          "dataDisks": []
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "properties": {
+                "primary": true
+              },
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nic1'))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[variables('virtualNetworkName')]",
+      "apiVersion": "2019-08-01",
+      "location": "[resourceGroup().location]",
+      "comments": "Virtual Network",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.102.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnet0Name')]",
+            "properties": {
+              "addressPrefix": "10.102.0.0/24"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('nic1')]",
+      "apiVersion": "2018-08-01",
+      "location": "[resourceGroup().location]",
+      "comments": "Primary NIC",
+      "dependsOn": [
+        "[variables('publicIPAddressName')]",
+        "[variables('networkSecurityGroupName')]",
+        "[variables('virtualNetworkName')]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig",
+            "properties": {
+              "subnet": {
+                "id": "[variables('subnet0Ref')]"
+              },
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIpAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIpAddresses', variables('publicIPAddressName'))]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIpAddresses",
+      "name": "[variables('publicIPAddressName')]",
+      "apiVersion": "2018-08-01",
+      "location": "[resourceGroup().location]",
+      "comments": "Public IP for Primary NIC",
+      "properties": {
+        "publicIpAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('networkSecurityGroupName')]",
+      "apiVersion": "2018-08-01",
+      "location": "[resourceGroup().location]",
+      "comments": "Network Security Group (NSG) for Primary NIC",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "default-allow-rdp",
+            "properties": {
+              "priority": 1000,
+              "sourceAddressPrefix": "*",
+              "protocol": "Tcp",
+              "destinationPortRange": "3389",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2021-04-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "StorageV2",
+      "sku": { "name": "Standard_LRS" }
+    }
+  ],
+  "outputs": {
+    "adminUsername": { "type": "string", "value": "[parameters('adminUsername')]" },
+    "adminPassword": { "type": "securestring", "value": "[parameters('adminPassword')]" },
+    "storageAccountName": { "type": "string", "value": "[variables('storageAccountName')]" }
+  }
+}
